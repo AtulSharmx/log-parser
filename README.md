@@ -1,71 +1,38 @@
-# SOC Log Parser
+﻿# log-parser
 
-A lightweight Python security utility designed for Security Operations Center (SOC) analysts to parse, analyze, and generate structured incident reports from Linux authentication logs (`auth.log`).
+Small Python script I wrote while learning SOC basics. It reads a Linux SSH log (auth.log) and shows:
 
----
+- IPs with too many failed logins (possible brute force)
+- which usernames each of those IPs tried
+- successful logins, with a warning if that IP also failed before
 
-## 📁 Directory Structure
+No libraries needed, just Python 3.
 
-```text
-├── .gitignore
-├── README.md
-├── parser.py
-├── sample_logs/
-│   └── auth.log
-└── output/          (created automatically when you run the script)
-```
+## Run
 
----
+    python parser.py                        # uses sample_logs/auth.log
+    python parser.py /var/log/auth.log      # your own log
+    python parser.py --threshold 5          # change the limit (default 3)
 
-## 🚀 Features
+## Output on the sample log
 
-- **Brute-Force Detection**: Flags IP addresses exceeding a configurable threshold of failed authentication attempts.
-- **Failed Login Tracking**: Analyzes targeted usernames and IP sources.
-- **Successful Login Auditing**: Summarizes successful SSH logins (password & publickey authentication).
-- **Privilege Escalation Monitoring**: Tracks `sudo` command executions and the users executing them.
-- **Automatic Reporting**: Formats security findings into a clean, text-based SOC summary report in `output/report.txt`.
+    IPs with 3+ failed logins:
+      192.168.1.105  7 fails  tried: admin, administrator, root, test, ubuntu
 
----
+    Successful logins:
+      atul from 192.168.1.50
+      root from 192.168.1.10
+      atul from 192.168.1.50
+      deploy from 192.168.1.15
 
-## 💻 Usage
+## What I learned
 
-### Prerequisites
-- Python 3.x installed (no external dependencies required).
+- how sshd writes failed/accepted login lines
+- 192.168.1.105 tried common default usernames (admin, root, ubuntu) one after another, which is what a brute-force or password-guessing attack looks like
+- a root login over password (192.168.1.10) is worth checking even if it succeeded
 
-### Running the Parser
-To execute the parser with default settings:
+## Next
 
-```bash
-python parser.py
-```
-
-This will read `sample_logs/auth.log` and automatically create the `output/` folder containing `output/report.txt`.
-
-### Custom Command-Line Options
-
-| Parameter | Description | Default |
-| :--- | :--- | :--- |
-| `--log` | Path to input log file | `sample_logs/auth.log` |
-| `--output` | Path to save output report | `output/report.txt` |
-| `--threshold` | Failed login attempt limit for brute-force alerting | `3` |
-
-#### Example Command:
-```bash
-python parser.py --log sample_logs/auth.log --output output/custom_report.txt --threshold 5
-```
-
----
-
-## 📊 Sample Output Preview
-
-```text
-=== SOC Security Log Parser Report ===
-
-Total lines read:      15
-Lines matched:         15
-Lines skipped:         0
-
-Flagged IPs (3+ failed attempts):
-------------------------------------------------------------
-IP: 192.168.1.105      | Failed Count: 7    | Usernames tried: admin, administrator, root, test, ubuntu
-```
+- only count failures inside a time window (e.g. 5 in 1 minute)
+- also catch "publickey" logins and sudo commands
+- check flagged IPs on AbuseIPDB
