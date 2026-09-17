@@ -1,112 +1,50 @@
-#!/usr/bin/env python3
-"""
-SOC Log Parser - Authentication Log Analyzer
-Parses Linux SSH authentication logs (auth.log) to detect failed login attempts,
-flag brute-force patterns, track successful logins, and audit sudo command executions.
-"""
+# ssh ke auth.log se check karta hai kaunsi IP baar baar fail ho rahi hai
+# chalane ke liye: python parser.py [logfile] [--threshold N]
 
-import os
 import re
+import sys
 import argparse
 from collections import defaultdict
 
-LOG_PATTERN = re.compile(
-    r'^(?P<timestamp>[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+'
-    r'(?P<host>\S+)\s+sshd\[\d+\]:\s+'
-    r'(?P<status>Failed|Accepted)\s+password\s+for\s+'
-    r'(?:invalid user\s+)?(?P<user>\S+)\s+from\s+'
-    r'(?P<ip>\S+)\s+port\s+(?P<port>\d+)'
-)
+# log line kuch aisi hoti hai:
+# Jul 22 03:14:22 server sshd[1023]: Failed password for invalid user admin from 192.168.1.105 port 51234 ssh2
+# isme se bas status, username aur ip chahiye
+pattern = re.compile(r"(Failed|Accepted) password for (?:invalid user )?(\S+) from (\S+)")
 
+ap = argparse.ArgumentParser()
+ap.add_argument("logfile", nargs="?", default="sample_logs/auth.log")
+ap.add_argument("--threshold", type=int, default=3)  # itne fail ke baad flag karna hai
+args = ap.parse_args()
 
-def read_log_file(filepath):
-    """Reads the log file and returns a list of non-empty, stripped lines."""
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"Log file not found at: {filepath}")
-    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-        lines = [line.strip() for line in f if line.strip()]
-    return lines
+fails = defaultdict(int)        # har ip ke kitne fail hue
+users_tried = defaultdict(set)  # ip ne kaun kaun se usernames try kiye
+logins = []                     # jo login ho gaye (user, ip)
 
+try:
+    with open(args.logfile, errors="ignore") as f:
+        for line in f:
+            m = pattern.search(line)
+            if not m:
+                continue  # baaki lines kaam ki nahi, skip
+            status, user, ip = m.groups()
+            if status == "Failed":
+                fails[ip] += 1
+                users_tried[ip].add(user)
+            else:
+                logins.append((user, ip))
+except FileNotFoundError:
+    sys.exit(f"can't find {args.logfile}")
 
-def parse_line(line):
-    """Extracts status, user, and ip from a single log line."""
-    match = LOG_PATTERN.search(line)
-    if not match:
-        return None
-    return {
-        "timestamp": match.group("timestamp"),
-        "status": match.group("status"),
-        "user": match.group("user"),
-        "ip": match.group("ip"),
-    }
+print(f"IPs with {args.threshold}+ failed logins:")
+bad = [ip for ip in fails if fails[ip] >= args.threshold]
+# sabse zyada fail wali upar dikhegi
+for ip in sorted(bad, key=lambda i: fails[i], reverse=True):
+    print(f"  {ip}  {fails[ip]} fails  tried: {', '.join(sorted(users_tried[ip]))}")
+if not bad:
+    print("  none")
 
-
-def process_log(lines):
-    """Parses every line, builds failed-attempt counts and usernames tried per IP."""
-    ip_failed_counts = defaultdict(int)
-    ip_users = defaultdict(set)
-    total_matched = 0
-    skipped_lines = 0
-
-    for line in lines:
-        parsed = parse_line(line)
-        if parsed is None:
-            skipped_lines += 1
-            continue
-
-        total_matched += 1
-        if parsed["status"] == "Failed":
-            ip_failed_counts[parsed["ip"]] += 1
-            ip_users[parsed["ip"]].add(parsed["user"])
-
-    return ip_failed_counts, ip_users, total_matched, skipped_lines
-
-
-def flag_suspicious(ip_failed_counts, threshold=3):
-    """Returns IPs meeting the threshold, sorted by failed count descending."""
-    flagged = {ip: count for ip, count in ip_failed_counts.items() if count >= threshold}
-    return dict(sorted(flagged.items(), key=lambda item: item[1], reverse=True))
-
-
-def write_report(flagged_ips, ip_users, total_lines, total_matched, skipped_lines, output_path="output/report.txt", threshold=3):
-    """Writes a human-readable summary report, automatically creating the output directory if missing."""
-    output_dir = os.path.dirname(output_path)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write("=== SOC Security Log Parser Report ===\n\n")
-        f.write(f"Total lines read:      {total_lines}\n")
-        f.write(f"Lines matched:         {total_matched}\n")
-        f.write(f"Lines skipped:         {skipped_lines}\n\n")
-
-        if not flagged_ips:
-            f.write(f"No suspicious IPs found with >={threshold} failed attempts.\n")
-        else:
-            f.write(f"Flagged IPs ({threshold}+ failed attempts):\n")
-            f.write("-" * 60 + "\n")
-            for ip, count in flagged_ips.items():
-                users_tried = ", ".join(sorted(ip_users[ip]))
-                f.write(f"IP: {ip:<18} | Failed Count: {count:<4} | Usernames tried: {users_tried}\n")
-
-    print(f"[+] Report successfully generated at: {output_path}")
-
-
-def main():
-    arg_parser = argparse.ArgumentParser(description="Parse an SSH auth log and flag brute-force IPs.")
-    arg_parser.add_argument("logfile", nargs="?", default="sample_logs/auth.log",
-                             help="Path to the log file (default: sample_logs/auth.log)")
-    arg_parser.add_argument("--output", default="output/report.txt",
-                             help="Path to output report file (default: output/report.txt)")
-    arg_parser.add_argument("--threshold", type=int, default=3,
-                             help="Minimum failed attempts to flag an IP (default: 3)")
-    args = arg_parser.parse_args()
-
-    lines = read_log_file(args.logfile)
-    ip_failed_counts, ip_users, total_matched, skipped_lines = process_log(lines)
-    flagged = flag_suspicious(ip_failed_counts, threshold=args.threshold)
-    write_report(flagged, ip_users, len(lines), total_matched, skipped_lines, output_path=args.output, threshold=args.threshold)
-
-
-if __name__ == "__main__":
-    main()
+print("\nSuccessful logins:")
+for user, ip in logins:
+    # agar same ip pehle fail hui thi aur ab login ho gayi to ye suspicious hai
+    note = "  <-- this IP also had failed logins!" if ip in fails else ""
+    print(f"  {user} from {ip}{note}")
