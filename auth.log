@@ -1,0 +1,37 @@
+Oct  9 23:59:50 webserver sshd[1101]: Failed password for atul from 192.0.2.10 port 50122 ssh2
+Oct 10 00:00:05 webserver sshd[1101]: Accepted password for atul from 192.0.2.10 port 50122 ssh2
+Oct 10 00:00:05 webserver sshd[1101]: pam_unix(sshd:session): session opened for user atul by (uid=0)
+Oct 10 00:05:01 webserver CRON[1150]: pam_unix(cron:session): session opened for user root by (uid=0)
+Oct 10 00:05:01 webserver CRON[1150]: pam_unix(cron:session): session closed for user root
+Oct 10 02:14:01 webserver sshd[2201]: Failed password for root from 203.0.113.45 port 41022 ssh2
+Oct 10 02:14:04 webserver sshd[2203]: Failed password for root from 203.0.113.45 port 41030 ssh2
+Oct 10 02:14:07 webserver sshd[2205]: Invalid user admin from 203.0.113.45 port 41038
+Oct 10 02:14:07 webserver sshd[2205]: Failed password for invalid user admin from 203.0.113.45 port 41038 ssh2
+Oct 10 02:14:10 webserver sshd[2207]: Failed password for root from 203.0.113.45 port 41046 ssh2
+Oct 10 02:14:13 webserver sshd[2209]: Invalid user test from 203.0.113.45 port 41054
+Oct 10 02:14:13 webserver sshd[2209]: Failed password for invalid user test from 203.0.113.45 port 41054 ssh2
+Oct 10 02:14:16 webserver sshd[2211]: Failed password for root from 203.0.113.45 port 41062 ssh2
+Oct 10 02:14:19 webserver sshd[2213]: Failed password for invalid user admin from 203.0.113.45 port 41070 ssh2
+Oct 10 02:14:22 webserver sshd[2215]: Failed password for root from 203.0.113.45 port 41078 ssh2
+Oct 10 02:14:30 webserver sshd[2230]: Accepted password for root from 203.0.113.45 port 41090 ssh2
+Oct 10 02:14:30 webserver sshd[2230]: pam_unix(sshd:session): session opened for user root by (uid=0)
+Oct 10 03:30:00 webserver sshd[3101]: Failed password for invalid user oracle from 198.51.100.77 port 60011 ssh2
+Oct 10 03:30:04 webserver sshd[3103]: Failed password for invalid user postgres from 198.51.100.77 port 60019 ssh2
+Oct 10 03:30:09 webserver sshd[3105]: Failed password for invalid user ubuntu from 198.51.100.77 port 60027 ssh2
+Oct 10 03:30:13 webserver sshd[3107]: Failed password for invalid user git from 198.51.100.77 port 60035 ssh2
+Oct 10 03:30:18 webserver sshd[3109]: Failed password for invalid user ftpuser from 198.51.100.77 port 60043 ssh2
+Oct 10 03:30:25 webserver sshd[3111]: Failed password for invalid user guest from 198.51.100.77 port 60051 ssh2
+Oct 10 03:30:26 webserver sshd[3111]: Connection closed by invalid user guest 198.51.100.77 port 60051 [preauth]
+Oct 10 05:00:02 webserver sshd[4101]: Failed password for deploy from 198.51.100.23 port 33100 ssh2
+Oct 10 05:03:40 webserver sshd[4120]: Failed password for deploy from 198.51.100.23 port 33188 ssh2
+Oct 10 05:07:15 webserver sshd[4142]: Failed password for deploy from 198.51.100.23 port 33240 ssh2
+Oct 10 05:12:51 webserver sshd[4170]: Failed password for deploy from 198.51.100.23 port 33302 ssh2
+Oct 10 05:18:09 webserver sshd[4199]: Failed password for deploy from 198.51.100.23 port 33377 ssh2
+Oct 10 05:25:33 webserver sshd[4230]: Failed password for deploy from 198.51.100.23 port 33410 ssh2
+Oct 10 06:00:01 webserver CRON[4300]: pam_unix(cron:session): session opened for user root by (uid=0)
+Oct 10 09:00:12 webserver sshd[5101]: Failed password for priya from 192.0.2.55 port 51500 ssh2
+Oct 10 09:00:20 webserver sshd[5101]: Failed password for priya from 192.0.2.55 port 51500 ssh2
+Oct 10 09:00:31 webserver sshd[5101]: Accepted password for priya from 192.0.2.55 port 51500 ssh2
+Oct 10 09:00:31 webserver sshd[5101]: pam_unix(sshd:session): session opened for user priya by (uid=0)
+Oct 10 09:45:10 webserver sudo:    priya : TTY=pts/0 ; PWD=/home/priya ; USER=root ; COMMAND=/usr/bin/apt update
+Oct 10 10:02:44 webserver sshd[5101]: Disconnected from user priya 192.0.2.55 port 51500
