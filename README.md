@@ -1,4 +1,4 @@
-﻿# SSH Brute Force Detector
+# SSH Brute Force Detector
 
 A Python script that reads a Linux `auth.log`, groups the SSH login attempts by IP and
 flags the ones that look like brute force. It prints an alert summary in the terminal.
@@ -84,23 +84,23 @@ Most targeted usernames: deploy (6), root (5), admin (2), priya (2), atul (1)
 
 ## Reading that output as an analyst
 
-This is the part I actually care about, because the script only sorts the lines — someone
+This is the part I actually care about, because the script only sorts the lines; someone
 still has to decide what to do.
 
 - **203.0.113.45** is the one to deal with first. 8 fails in under a minute against
   `admin`, `root` and `test` is automated guessing, mapped in MITRE ATT&CK as
   [T1110 (Brute Force)](https://attack.mitre.org/techniques/T1110/). But the important
   line is the next one: it then **logged in as root**. That has to be treated as a
-  possible compromise, not just an attack attempt — kill the sessions, rotate the
+  possible compromise rather than just an attack attempt: kill the sessions, rotate the
   password, and check what root did after that timestamp.
 - **198.51.100.77** tried 6 different service accounts (`postgres`, `oracle`, `git`,
   `ftpuser`, `guest`, `ubuntu`) rather than guessing one password repeatedly. That is
-  username enumeration — it is checking which accounts exist. Block it and confirm none
+  username enumeration: it is checking which accounts exist. Block it and confirm none
   of those accounts are actually enabled with a password.
 - **198.51.100.23** never trips the 60s rule, max 1 fail per window, but it failed 6
   times on `deploy` alone. A human mistyping stops after three. This is the one a
   pure counter with no time window would rank the same as the fast attack, and the one
-  a pure window rule would miss entirely — which is why both buckets exist.
+  a pure window rule would miss entirely, which is why both buckets exist.
 - **192.0.2.10 and 192.0.2.55** are below threshold and almost certainly someone
   fat-fingering their own password. Worth nothing unless they show up again tomorrow.
 
@@ -144,5 +144,5 @@ machine.
 
 ## Author
 
-**Atul Sharma** — BCA (Data Science) student, SGT University
+**Atul Sharma**, BCA (Data Science) student, SGT University
 GitHub: [@AtulSharmx](https://github.com/AtulSharmx)
