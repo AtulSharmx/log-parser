@@ -71,6 +71,17 @@ check("long username is capped", "a" * 100 not in out)
 out = run_on(["Oct 10 04:00:00 webserver sshd[1]: Failed password for root from 203.0.113.9"])
 check("malformed line is skipped", "203.0.113.9" not in out)
 
+# 6. some other program logging the same words is not an ssh login attempt. without the
+#    sshd[pid] anchor, anything that echoes user input into syslog could inject attempts.
+out = run_on([f"Oct 10 07:00:{s:02d} webserver myapp[99]: user said: Failed password for "
+              f"root from 9.9.9.9 port 22 ssh2" for s in range(1, 7)])
+check("non-sshd line is not counted as an attempt", "9.9.9.9" not in out)
+
+# 7. a different host's sshd is still read (the hostname field is not pinned to one value)
+out = run_on([line(f"08:00:{s:02d}", "root", "203.0.113.11", 45000 + s).replace("webserver", "db-01")
+              for s in range(1, 7)])
+check("another host's sshd still parses", "203.0.113.11" in out)
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed")

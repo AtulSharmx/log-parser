@@ -62,22 +62,29 @@ python test_log_analyzer.py
 
 That runs the checks on the parsing, described below.
 
-## Not trusting the username
+## Not trusting the log line
 
-The username in an auth.log line is whatever the person connecting typed, so it is
-attacker-controlled. Two things follow from that.
+Both the username and, on a busy box, the surrounding log text are things an attacker can
+influence, so the two regex are pinned to the whole sshd line rather than searching inside
+it. Three parts of that matter.
 
-The regex is anchored to the ` port <number>` that sshd always writes at the end. Without
-that anchor, someone logging in as `bob from 9.9.9.9 port 22` makes the line contain two
-`from <ip> port N` sections, and the parser picks up the attacker's fake address instead
-of the real one. The `.+` before it is greedy on purpose: it keeps backtracking until it
-matches the **last** one on the line, which is the address sshd wrote.
+`\S+ sshd\[\d+\]:` after the timestamp. Without it, any program that writes user input
+into syslog can get its text counted as a real SSH attempt. A line like
+`myapp[99]: user said: Failed password for root from 9.9.9.9 port 22 ssh2` would otherwise
+show up as a brute force from 9.9.9.9 that never happened.
 
-The username is also stripped of unprintable characters and capped in length before it is
-printed. An escape sequence in a username could otherwise clear the terminal line and
-print a fake `[ALERT]` row into my own report.
+`port \d+ ssh2$` at the end. The address I report has to be the one sshd wrote, which is
+always the last one on the line. Log in as `bob from 9.9.9.9 port 22` and the line now
+holds two `from <ip> port N` sections. Anchoring to the end picks the real one.
 
-`test_log_analyzer.py` covers both, plus the ordinary case.
+`{1,256}` on the username, so a very long crafted line cannot make the regex work through
+an enormous number of split points.
+
+On top of the parsing, the username is stripped of unprintable characters and capped
+before it is printed, because an escape sequence in a username could otherwise clear the
+terminal line and print a fake `[ALERT]` row into my own summary.
+
+`test_log_analyzer.py` covers all of these and the ordinary case.
 
 ## Sample output
 

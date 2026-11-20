@@ -11,11 +11,14 @@ WINDOW = 60    # ...inside 60 sec = brute force, thats my rule
 
 # 2 regex, one for failed logins and one for the ones that worked
 # the (?:invalid user )? bit is coz sshd adds that when the username doesnt even exist
-# the " port NNNN" on the end matters. without it, a username like "bob from 9.9.9.9 port 22"
-# makes the regex grab that fake ip instead of the real one sshd wrote at the end of the line.
-# .+ is greedy on purpose so it keeps backtracking to the LAST "from <ip> port N" = the real one
-FAIL_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) .*Failed password for (?:invalid user )?(.+) from ([\d.]+) port \d+")
-OK_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) .*Accepted password for (.+) from ([\d.]+) port \d+")
+# both regex are pinned to the whole sshd line, start to end, on purpose:
+#   - "\S+ sshd\[\d+\]:" so another program logging the words "Failed password for"
+#     cant get its text counted as a real ssh attempt
+#   - "port \d+ ssh2$" at the end so the ip i read is the one sshd wrote, not one the
+#     attacker typed into their username (try logging in as "bob from 9.9.9.9 port 22")
+#   - {1,256} on the username so a giant line cant make the regex chew forever
+FAIL_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) \S+ sshd\[\d+\]: Failed password for (?:invalid user )?(.{1,256}?) from ([\d.]+) port \d+ ssh2\s*$")
+OK_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) \S+ sshd\[\d+\]: Accepted password for (.{1,256}?) from ([\d.]+) port \d+ ssh2\s*$")
 
 def clean_user(u):
     # the username comes straight out of the log so i dont trust it for printing.
