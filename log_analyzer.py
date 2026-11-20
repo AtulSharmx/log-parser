@@ -11,8 +11,18 @@ WINDOW = 60    # ...inside 60 sec = brute force, thats my rule
 
 # 2 regex, one for failed logins and one for the ones that worked
 # the (?:invalid user )? bit is coz sshd adds that when the username doesnt even exist
-FAIL_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) .*Failed password for (?:invalid user )?(\S+) from ([\d.]+)")
-OK_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) .*Accepted password for (\S+) from ([\d.]+)")
+# the " port NNNN" on the end matters. without it, a username like "bob from 9.9.9.9 port 22"
+# makes the regex grab that fake ip instead of the real one sshd wrote at the end of the line.
+# .+ is greedy on purpose so it keeps backtracking to the LAST "from <ip> port N" = the real one
+FAIL_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) .*Failed password for (?:invalid user )?(.+) from ([\d.]+) port \d+")
+OK_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) .*Accepted password for (.+) from ([\d.]+) port \d+")
+
+def clean_user(u):
+    # the username comes straight out of the log so i dont trust it for printing.
+    # a newline or an escape code in there could fake a whole alert line in my summary
+    u = "".join(c for c in u if c.isprintable())
+    return u[:40] + "..." if len(u) > 40 else u
+
 
 def to_time(ts):
     # auth.log has no year so i just stick 2024 in front (leap year, so feb 29 wont crash lol)
@@ -37,11 +47,11 @@ try:
             lines += 1
             m = FAIL_RE.search(line)
             if m:
-                fails[m.group(3)].append((to_time(m.group(1)), m.group(2)))
+                fails[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
                 continue
             m = OK_RE.search(line)
             if m:
-                success[m.group(3)].append((to_time(m.group(1)), m.group(2)))
+                success[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
 except FileNotFoundError:
     sys.exit(f"oops, cant find '{LOG_FILE}', check the path once")
 

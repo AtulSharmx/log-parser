@@ -56,6 +56,29 @@ python log_analyzer.py /var/log/auth.log
 
 Reading the real `/var/log/auth.log` on Linux usually needs `sudo`.
 
+```bash
+python test_log_analyzer.py
+```
+
+That runs the checks on the parsing, described below.
+
+## Not trusting the username
+
+The username in an auth.log line is whatever the person connecting typed, so it is
+attacker-controlled. Two things follow from that.
+
+The regex is anchored to the ` port <number>` that sshd always writes at the end. Without
+that anchor, someone logging in as `bob from 9.9.9.9 port 22` makes the line contain two
+`from <ip> port N` sections, and the parser picks up the attacker's fake address instead
+of the real one. The `.+` before it is greedy on purpose: it keeps backtracking until it
+matches the **last** one on the line, which is the address sshd wrote.
+
+The username is also stripped of unprintable characters and capped in length before it is
+printed. An escape sequence in a username could otherwise clear the terminal line and
+print a fake `[ALERT]` row into my own report.
+
+`test_log_analyzer.py` covers both, plus the ordinary case.
+
 ## Sample output
 
 ```
@@ -111,8 +134,9 @@ config problem to raise with whoever owns the box.
 ## Project files
 
 ```
-├── log_analyzer.py   # the main script
-├── auth.log          # sample log with a few made-up attack scenarios
+├── log_analyzer.py        # the main script
+├── test_log_analyzer.py   # checks on the parsing
+├── auth.log               # sample log with a few made-up attack scenarios
 └── README.md
 ```
 
