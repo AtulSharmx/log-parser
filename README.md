@@ -94,8 +94,14 @@ handled on purpose:
 - A missing ` ssh2` at the end, which not every build writes.
 - `message repeated 9 times: [ Failed password ... ]`. syslog collapses identical lines,
   so that single line is nine attempts. Read as one, a steady brute force against the same
-  account looks like background noise. It is unwrapped and counted properly, capped at
-  10,000 so a log claiming a billion repeats cannot exhaust memory.
+  account looks like background noise.
+
+The repeat count is carried as a weight rather than turned back into that many lines. My
+first attempt did rebuild the lines, which meant a log full of `repeated 10000 times`
+could balloon into millions of entries: 300 such lines took 34 seconds. Storing
+`(time, user, count)` and summing the counts inside the sliding window gives the same
+answer in a tenth of a second, and memory now depends on the number of lines rather than
+on the numbers inside them.
 
 `test_log_analyzer.py` covers all of these and the ordinary case.
 

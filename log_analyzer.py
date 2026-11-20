@@ -30,14 +30,18 @@ OK_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) " + SSHD + r"Accepted password for (.
 REPEAT_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) (\S+ sshd(?:-session)?\[\d+\]:) message repeated (\d+) times: \[ ?(.*?) ?\]\s*$")
 
 
-def expand(line):
-    # turn one "repeated N times" line back into the N lines it stands for.
-    # capped so a log claiming 9999999999 times cant eat all the memory
+def unwrap(line):
+    # a "repeated N times" line stands for N attempts, but i dont rebuild N lines out of
+    # it. i carry the number along and weigh it later, so a log claiming a billion repeats
+    # costs the same memory as one claiming two.
     m = REPEAT_RE.match(line)
     if not m:
-        return (line,)
-    ts, tag, n, inner = m.groups()
-    return (f"{ts} {tag} {inner}",) * min(int(n), 10000)
+        return line, 1
+    ts, tag, digits, inner = m.groups()
+    # int() on a few thousand digits raises on python 3.11+, and one silly line
+    # shouldnt be able to kill the whole run
+    count = int(digits) if len(digits) <= 9 else 10 ** 9
+    return f"{ts} {tag} {inner}", count
 
 def clean_user(u):
     # the username comes straight out of the log so i dont trust it for printing.
@@ -51,30 +55,38 @@ def to_time(ts):
     # only the gaps between times matter here so the year doesnt really matter
     return datetime.strptime("2024 " + ts, "%Y %b %d %H:%M:%S")
 
-def max_burst(times):
+def max_burst(events):
     # sliding window trick: whats the most fails squeezed inside WINDOW seconds?
-    best, start = 0, 0
-    for end in range(len(times)):
-        while (times[end] - times[start]).total_seconds() > WINDOW:
-            start += 1  # oldest fail is too old now, kick it out of the window
-        best = max(best, end - start + 1)
+    # events are (time, count), because one syslog line can stand for many attempts
+    best = running = start = 0
+    for end in range(len(events)):
+        running += events[end][1]
+        while (events[end][0] - events[start][0]).total_seconds() > WINDOW:
+            running -= events[start][1]  # oldest fail is too old now, kick it out
+            start += 1
+        best = max(best, running)
     return best
 
-fails = defaultdict(list)    # ip -> [(time, user), ...]
+fails = defaultdict(list)    # ip -> [(time, user, count), ...]
 success = defaultdict(list)  # same thing but for logins that actually worked
 lines = 0
+unreadable = 0
 try:
     with open(LOG_FILE, encoding="utf-8", errors="ignore") as f:
         for raw in f:
             lines += 1
-            for line in expand(raw):
-                m = FAIL_RE.search(line)
-                if m:
-                    fails[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
-                    continue
-                m = OK_RE.search(line)
-                if m:
-                    success[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
+            line, count = unwrap(raw)
+            m, bucket = FAIL_RE.search(line), fails
+            if not m:
+                m, bucket = OK_RE.search(line), success
+            if not m:
+                continue
+            try:
+                when = to_time(m.group(1))
+            except ValueError:
+                unreadable += 1  # a date like "Feb 30" shouldnt stop the whole run
+                continue
+            bucket[m.group(3)].append((when, clean_user(m.group(2)), count))
 except FileNotFoundError:
     sys.exit(f"oops, cant find '{LOG_FILE}', check the path once")
 
@@ -82,28 +94,35 @@ except FileNotFoundError:
 brute, slow, normal = [], [], []
 for ip, tries in fails.items():
     tries.sort()
-    times = [t for t, u in tries]
-    burst = max_burst(times)
-    users = sorted(set(u for t, u in tries))
+    burst = max_burst([(t, c) for t, u, c in tries])
+    total = sum(c for t, u, c in tries)
+    users = sorted(set(u for t, u, c in tries))
     # the scary part: did this same ip get IN after all those fails??
-    got_in = sorted(set(u for t, u in success.get(ip, []) if t > times[0]))
-    row = (ip, len(tries), burst, users, got_in)
+    first = tries[0][0]
+    got_in = sorted(set(u for t, u, c in success.get(ip, []) if t > first))
+    row = (ip, total, burst, users, got_in)
     if burst >= THRESHOLD:
         brute.append(row)
-    elif len(tries) >= THRESHOLD:
+    elif total >= THRESHOLD:
         slow.append(row)  # not fast enough for my rule but still keeps trying, smells fishy
     else:
         normal.append(row)
 
 # ok now print everything nicely
-total_fails = sum(len(v) for v in fails.values())
-top_users = Counter(u for v in fails.values() for t, u in v).most_common(5)
+total_fails = sum(c for v in fails.values() for t, u, c in v)
+counts = Counter()
+for v in fails.values():
+    for t, u, c in v:
+        counts[u] += c
+top_users = counts.most_common(5)
 print("=" * 60)
 print("      AUTH.LOG ANALYZER - BRUTE FORCE ALERT SUMMARY")
 print("=" * 60)
 print(f"File scanned   : {LOG_FILE} ({lines} lines)")
 print(f"Failed logins  : {total_fails} from {len(fails)} IPs")
 print(f"Detection rule : {THRESHOLD}+ fails within {WINDOW}s = brute force")
+if unreadable:
+    print(f"Skipped        : {unreadable} line(s) with a date i couldnt read")
 print("-" * 60)
 if not brute and not slow:
     print("No attacks found, server is chillin :)")

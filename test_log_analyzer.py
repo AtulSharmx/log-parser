@@ -4,6 +4,7 @@
 import subprocess
 import sys
 import tempfile
+import time
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -99,10 +100,22 @@ out = run_on(["Oct 10 09:20:00 web sshd[2203]: message repeated 9 times: "
 check("syslog repeat counts as N attempts",
       "BRUTE FORCE from 203.0.113.14" in out and "9 fails" in out)
 
-# 10. but an absurd repeat count must not be taken at face value
-out = run_on(["Oct 10 09:30:00 web sshd[2203]: message repeated 99999999 times: "
-              "[ Failed password for root from 203.0.113.15 port 41025 ssh2]"])
-check("absurd repeat count is capped", "203.0.113.15" in out)
+# 10. the count is carried as a weight, never turned into that many lines, so a hostile
+#     log cannot make this eat memory or time. both of these used to hang or crash.
+t0 = time.perf_counter()
+out = run_on(["Oct 10 09:30:00 web sshd[2203]: message repeated 10000 times: "
+              "[ Failed password for root from 203.0.113.15 port 41025 ssh2]"] * 2000)
+check("2000 repeat lines finish quickly", time.perf_counter() - t0 < 10)
+check("their counts are added up", "20000000 fails total" in out)
+
+out = run_on(["Oct 10 09:40:00 web sshd[2203]: message repeated " + "9" * 5000 +
+              " times: [ Failed password for root from 203.0.113.16 port 41026 ssh2]"])
+check("an absurd digit count neither crashes nor hangs", "203.0.113.16" in out)
+
+# 11. a date that cannot exist is skipped without killing the run
+out = run_on(["Feb 30 00:00:00 web sshd[1]: Failed password for root from 203.0.113.17 port 1 ssh2",
+              line("10:00:00", "root", "203.0.113.18", 46000)])
+check("an impossible date does not stop the analysis", "203.0.113.18" in out)
 
 print()
 if failures:
