@@ -17,8 +17,27 @@ WINDOW = 60    # ...inside 60 sec = brute force, thats my rule
 #   - "port \d+ ssh2$" at the end so the ip i read is the one sshd wrote, not one the
 #     attacker typed into their username (try logging in as "bob from 9.9.9.9 port 22")
 #   - {1,256} on the username so a giant line cant make the regex chew forever
-FAIL_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) \S+ sshd\[\d+\]: Failed password for (?:invalid user )?(.{1,256}?) from ([\d.]+) port \d+ ssh2\s*$")
-OK_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) \S+ sshd\[\d+\]: Accepted password for (.{1,256}?) from ([\d.]+) port \d+ ssh2\s*$")
+# openssh 9.8 split sshd into sshd-session, so accept both tags. the " ssh2" at the end
+# is optional because not every build writes it, and if i require it i silently drop real
+# attempts, which is the worst way for a detector to be wrong.
+SSHD = r"\S+ sshd(?:-session)?\[\d+\]: "
+TAIL = r" from ([\d.]+) port \d+(?: ssh2)?\s*$"
+FAIL_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) " + SSHD + r"Failed password for (?:invalid user )?(.{1,256}?)" + TAIL)
+OK_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) " + SSHD + r"Accepted password for (.{1,256}?)" + TAIL)
+
+# syslog squashes identical lines into: message repeated 9 times: [ Failed password ... ]
+# thats 9 real attempts hiding in one line. miss it and a steady brute force looks quiet.
+REPEAT_RE = re.compile(r"^(\w{3}\s+\d+ [\d:]+) (\S+ sshd(?:-session)?\[\d+\]:) message repeated (\d+) times: \[ ?(.*?) ?\]\s*$")
+
+
+def expand(line):
+    # turn one "repeated N times" line back into the N lines it stands for.
+    # capped so a log claiming 9999999999 times cant eat all the memory
+    m = REPEAT_RE.match(line)
+    if not m:
+        return (line,)
+    ts, tag, n, inner = m.groups()
+    return (f"{ts} {tag} {inner}",) * min(int(n), 10000)
 
 def clean_user(u):
     # the username comes straight out of the log so i dont trust it for printing.
@@ -46,15 +65,16 @@ success = defaultdict(list)  # same thing but for logins that actually worked
 lines = 0
 try:
     with open(LOG_FILE, encoding="utf-8", errors="ignore") as f:
-        for line in f:
+        for raw in f:
             lines += 1
-            m = FAIL_RE.search(line)
-            if m:
-                fails[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
-                continue
-            m = OK_RE.search(line)
-            if m:
-                success[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
+            for line in expand(raw):
+                m = FAIL_RE.search(line)
+                if m:
+                    fails[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
+                    continue
+                m = OK_RE.search(line)
+                if m:
+                    success[m.group(3)].append((to_time(m.group(1)), clean_user(m.group(2))))
 except FileNotFoundError:
     sys.exit(f"oops, cant find '{LOG_FILE}', check the path once")
 

@@ -82,6 +82,28 @@ out = run_on([line(f"08:00:{s:02d}", "root", "203.0.113.11", 45000 + s).replace(
               for s in range(1, 7)])
 check("another host's sshd still parses", "203.0.113.11" in out)
 
+# 8. real sshd does not always look like my sample. dropping these quietly is the worst
+#    way for a detector to be wrong: it reports "no attacks" on a log full of them.
+out = run_on([f"Oct 10 09:00:{s:02d} web sshd-session[2201]: Failed password for root "
+              f"from 203.0.113.12 port {41000 + s} ssh2" for s in range(1, 7)])
+check("openssh 9.8 sshd-session tag is read", "BRUTE FORCE from 203.0.113.12" in out)
+
+out = run_on([f"Oct 10 09:10:{s:02d} web sshd[2201]: Failed password for root "
+              f"from 203.0.113.13 port {41000 + s}" for s in range(1, 7)])
+check("line without trailing ssh2 is read", "BRUTE FORCE from 203.0.113.13" in out)
+
+# 9. syslog collapses identical lines. one of these is nine attempts, enough on its own
+#    to cross the threshold, so it must not be read as a single try.
+out = run_on(["Oct 10 09:20:00 web sshd[2203]: message repeated 9 times: "
+              "[ Failed password for root from 203.0.113.14 port 41024 ssh2]"])
+check("syslog repeat counts as N attempts",
+      "BRUTE FORCE from 203.0.113.14" in out and "9 fails" in out)
+
+# 10. but an absurd repeat count must not be taken at face value
+out = run_on(["Oct 10 09:30:00 web sshd[2203]: message repeated 99999999 times: "
+              "[ Failed password for root from 203.0.113.15 port 41025 ssh2]"])
+check("absurd repeat count is capped", "203.0.113.15" in out)
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed")

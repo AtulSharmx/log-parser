@@ -84,6 +84,19 @@ On top of the parsing, the username is stripped of unprintable characters and ca
 before it is printed, because an escape sequence in a username could otherwise clear the
 terminal line and print a fake `[ALERT]` row into my own summary.
 
+Being strict about the shape of a line cuts both ways, though. If I require more than
+sshd actually writes, I drop real attempts and the report comes back clean on a log full
+of attacks, which is the worst way for a detector to be wrong. So three real variants are
+handled on purpose:
+
+- `sshd-session[1234]:` as well as `sshd[1234]:`, because OpenSSH 9.8 split the session
+  process out and the tag changed.
+- A missing ` ssh2` at the end, which not every build writes.
+- `message repeated 9 times: [ Failed password ... ]`. syslog collapses identical lines,
+  so that single line is nine attempts. Read as one, a steady brute force against the same
+  account looks like background noise. It is unwrapped and counted properly, capped at
+  10,000 so a log claiming a billion repeats cannot exhaust memory.
+
 `test_log_analyzer.py` covers all of these and the ordinary case.
 
 ## Sample output
